@@ -1,5 +1,6 @@
 """Utility functions for loading the housing data set."""
 import pandas as pd
+import numpy as np
 import statsmodels.api as sm
 from math import cos, asin, sqrt
 import time
@@ -186,13 +187,17 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     Returns
     -------
     float
-        Distance between the two coordinates in km.
+        Distance between the two coordinates in miles.
 
     """
-    p = 0.017453292519943295  # Pi/180
-    a = 0.5 - cos((lat2-lat1)*p)/2 \
-        + cos(lat1*p)*cos(lat2*p) * (1-cos((lon2-lon1)*p)) / 2
-    return 12742 * asin(sqrt(a))
+    miles_constant = 3959
+    lat1, lon1, lat2, lon2 = map(np.deg2rad, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+    mi = miles_constant * c
+    return mi
 
 
 def get_closest_properties(
@@ -208,7 +213,7 @@ def get_closest_properties(
     property : pd.DataFrame
         Property to get the closest locations.
     radius : float
-        Radius in km to look for properties.
+        Radius in miles to look for properties.
 
     Returns
     -------
@@ -218,7 +223,7 @@ def get_closest_properties(
     """
     # Make sure to remove the actual property from the list.
     return dataframe[dataframe.apply(
-        lambda x: calculate_distance(property['lat'], property['long'], x['lat'], x['long']) < radius and x['id'] != property['id'], axis=1)]
+        lambda row: calculate_distance(property['lat'], property['long'], row['lat'], row['long']) < radius and row['id'] != property['id'], axis=1)]
 
 
 def get_price_per_sqft_living(dataframe: pd.DataFrame):
@@ -240,13 +245,13 @@ def get_price_per_sqft_living(dataframe: pd.DataFrame):
 
     price_per_sqft = pd.Series([])
     for idx, property_ds in dataframe.iterrows():
-        radius = 1  # Set radius 1km around location
+        radius = 1  # Set radius 1 mile around location
 
         # Get nearest locations
         closest_properties_df = get_closest_properties(
             dataframe, property_ds, radius)
 
-        # Increment search area by 1km around location if empty.
+        # Increment search area by 1 mile around location if empty.
         while closest_properties_df.empty:
             radius += 1
             closest_properties_df = get_closest_properties(
